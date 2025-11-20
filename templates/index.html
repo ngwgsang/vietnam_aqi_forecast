@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AirGuard Pro Dashboard</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 pb-10 min-h-screen">
+
+    <!-- HEADER -->
+    <header class="bg-white shadow-sm sticky top-0 z-20">
+        <div class="max-w-5xl mx-auto px-4 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-2">
+                <div class="bg-blue-600 p-2 rounded-lg text-white">
+                    <i data-lucide="wind"></i>
+                </div>
+                <h1 class="text-xl font-bold text-gray-800 hidden sm:block">AirGuard Pro</h1>
+            </div>
+            
+            <div class="flex items-center gap-2 bg-gray-100 px-3 py-1.5 rounded-full">
+                <i data-lucide="map-pin" class="text-gray-500 w-4 h-4"></i>
+                <span class="font-medium text-sm" id="location-text">Loading...</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-5xl mx-auto px-4 mt-6 space-y-6">
+        
+        <!-- 1. CURRENT STATUS -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <!-- Main AQI Card -->
+            <div class="md:col-span-2 bg-white rounded-2xl shadow-sm p-6 flex flex-col sm:flex-row items-center justify-between relative overflow-hidden">
+                <!-- Dynamic Color Bar -->
+                <div id="aqi-bar" class="absolute top-0 left-0 w-2 h-full bg-gray-200"></div>
+                
+                <div class="z-10 text-center sm:text-left w-full sm:w-auto">
+                    <h2 class="text-gray-500 font-medium mb-1">Chất lượng không khí hiện tại</h2>
+                    <div class="text-5xl font-bold mb-2" id="current-aqi">--</div>
+                    <div id="current-status-badge" class="inline-block px-3 py-1 rounded-full text-sm font-bold mb-4 bg-gray-200">
+                        --
+                    </div>
+                    <p class="text-sm text-gray-400">Cập nhật: <span id="update-time">--</span></p>
+                </div>
+
+                <!-- Weather Stats Grid -->
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-6 sm:mt-0 z-10 w-full sm:w-auto">
+                    <div class="bg-gray-50 p-3 rounded-xl flex items-center gap-3">
+                        <i data-lucide="thermometer" class="text-orange-500"></i>
+                        <div>
+                            <div class="text-xs text-gray-500">Nhiệt độ</div>
+                            <div class="font-bold"><span id="temp">--</span>°C</div>
+                        </div>
+                    </div>
+                    <div class="bg-gray-50 p-3 rounded-xl flex items-center gap-3">
+                        <i data-lucide="cloud-rain" class="text-blue-500"></i>
+                        <div>
+                            <div class="text-xs text-gray-500">Độ ẩm</div>
+                            <div class="font-bold"><span id="humidity">--</span>%</div>
+                        </div>
+                    </div>
+                    <div class="bg-gray-50 p-3 rounded-xl flex items-center gap-3 col-span-2 sm:col-span-1">
+                        <i data-lucide="sun" class="text-yellow-500"></i>
+                        <div>
+                            <div class="text-xs text-gray-500">Thời tiết</div>
+                            <div class="font-bold" id="weather-desc">--</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recommendation Card -->
+            <div class="bg-blue-50 border border-blue-100 rounded-2xl p-6 flex flex-col justify-center">
+                <h3 class="flex items-center gap-2 font-bold text-blue-800 mb-3">
+                    <i data-lucide="info" class="w-4 h-4"></i> Khuyến nghị ngay
+                </h3>
+                <p class="text-sm text-blue-900 leading-relaxed">
+                    Chất lượng không khí đang ở mức kém. Người nhạy cảm nên hạn chế ra ngoài. Hãy bật máy lọc không khí nếu có.
+                </p>
+            </div>
+        </div>
+
+        <!-- 2. 24H FORECAST (Bar Chart) -->
+        <div class="bg-white rounded-2xl shadow-sm p-6">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="font-bold text-lg flex items-center gap-2">
+                    <i data-lucide="clock" class="text-blue-600"></i>
+                    Diễn biến 24 giờ tới
+                </h3>
+            </div>
+            <div class="h-52 w-full relative">
+                <canvas id="hourlyChart"></canvas>
+            </div>
+        </div>
+
+        <!-- 3. 7-DAY FORECAST (Area Chart) -->
+        <div class="bg-white rounded-2xl shadow-sm p-6">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="font-bold text-lg flex items-center gap-2">
+                    <i data-lucide="activity" class="text-blue-600"></i>
+                    Dự báo 7 ngày tới
+                </h3>
+            </div>
+            
+            <div class="h-64 w-full relative">
+                <canvas id="weeklyChart"></canvas>
+            </div>
+
+            <!-- Weekly Cards Container -->
+            <div id="weekly-cards" class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2 mt-6">
+                <!-- JS will inject items here -->
+            </div>
+        </div>
+
+        <!-- 4. POLLUTANTS & WARNINGS -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Pollutants -->
+            <div class="bg-white rounded-2xl shadow-sm p-6">
+                <h3 class="font-bold text-lg mb-4">Chi tiết chất gây ô nhiễm</h3>
+                <div id="pollutants-grid" class="grid grid-cols-2 gap-4">
+                    <!-- JS will inject items here -->
+                </div>
+            </div>
+
+            <!-- Warnings -->
+            <div class="bg-white rounded-2xl shadow-sm p-6 border-l-4 border-red-500">
+                <h3 class="font-bold text-lg mb-4 flex items-center gap-2 text-red-600">
+                    <i data-lucide="alert-triangle"></i>
+                    Cảnh báo cao điểm
+                </h3>
+                <div class="space-y-4">
+                    <div class="flex gap-3 items-start">
+                        <div class="bg-red-100 text-red-600 p-2 rounded-full text-xs font-bold whitespace-nowrap">T7 - 16:00</div>
+                        <div>
+                            <p class="font-medium text-gray-800">Dự báo bụi mịn tăng cao</p>
+                            <p class="text-sm text-gray-500">Dự kiến đạt mức "Rất xấu" vào cuối tuần.</p>
+                        </div>
+                    </div>
+                    <hr class="border-gray-100"/>
+                    <div class="flex gap-3 items-start">
+                        <div class="bg-orange-100 text-orange-600 p-2 rounded-full text-xs font-bold whitespace-nowrap">Hôm nay</div>
+                        <div>
+                            <p class="font-medium text-gray-800">Tia UV mức trung bình</p>
+                            <p class="text-sm text-gray-500">Chỉ số UV tăng nhẹ vào buổi trưa.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        // --- MOCK DATA ---
+        const mockCurrentData = {
+            location: "Hà Nội, Việt Nam",
+            aqi: 156,
+            status: "Kém",
+            temp: 28,
+            humidity: 65,
+            wind: 12,
+            weather: "Có mây",
+            updated: "10 phút trước",
+            pollutants: { pm25: 68.5, pm10: 90.2, o3: 15.4, no2: 22.1 }
+        };
+
+        const mockWeeklyData = [
+            { day: 'T2', aqi: 156, pm25: 68 },
+            { day: 'T3', aqi: 142, pm25: 55 },
+            { day: 'T4', aqi: 95, pm25: 32 },
+            { day: 'T5', aqi: 88, pm25: 28 },
+            { day: 'T6', aqi: 110, pm25: 40 },
+            { day: 'T7', aqi: 165, pm25: 75 },
+            { day: 'CN', aqi: 180, pm25: 85 },
+        ];
+
+        // 24h Data Generation
+        const mockHourlyData = Array.from({ length: 24 }, (_, i) => {
+            const hour = (new Date().getHours() + i) % 24;
+            const aqi = 100 + Math.floor(Math.sin(i / 3) * 40) + Math.floor(Math.random() * 20);
+            return { time: `${hour}:00`, aqi: aqi > 0 ? aqi : 20 };
+        });
+
+        // --- HELPERS ---
+        function getAQIColor(aqi) {
+            if (aqi <= 50) return { bg: 'bg-green-500', text: 'text-white', hex: '#22c55e', textClass: 'text-green-600' };
+            if (aqi <= 100) return { bg: 'bg-yellow-400', text: 'text-black', hex: '#facc15', textClass: 'text-yellow-600' };
+            if (aqi <= 150) return { bg: 'bg-orange-500', text: 'text-white', hex: '#f97316', textClass: 'text-orange-600' };
+            if (aqi <= 200) return { bg: 'bg-red-500', text: 'text-white', hex: '#ef4444', textClass: 'text-red-600' };
+            return { bg: 'bg-purple-600', text: 'text-white', hex: '#9333ea', textClass: 'text-purple-700' };
+        }
+
+        // --- RENDER FUNCTIONS ---
+        function renderDashboard() {
+            // 1. Header & Current Stats
+            document.getElementById('location-text').innerText = mockCurrentData.location;
+            document.getElementById('current-aqi').innerText = mockCurrentData.aqi;
+            
+            const colors = getAQIColor(mockCurrentData.aqi);
+            const statusBadge = document.getElementById('current-status-badge');
+            statusBadge.innerText = mockCurrentData.status;
+            statusBadge.className = `inline-block px-3 py-1 rounded-full text-sm font-bold mb-4 ${colors.bg} ${colors.text}`;
+            
+            document.getElementById('aqi-bar').className = `absolute top-0 left-0 w-2 h-full ${colors.bg}`;
+            document.getElementById('update-time').innerText = mockCurrentData.updated;
+            document.getElementById('temp').innerText = mockCurrentData.temp;
+            document.getElementById('humidity').innerText = mockCurrentData.humidity;
+            document.getElementById('weather-desc').innerText = mockCurrentData.weather;
+
+            // 2. Pollutants
+            const pollGrid = document.getElementById('pollutants-grid');
+            pollGrid.innerHTML = Object.entries(mockCurrentData.pollutants).map(([key, val]) => `
+                <div class="p-4 rounded-xl bg-gray-50 border border-gray-100">
+                    <div class="flex justify-between items-start mb-2">
+                        <span class="uppercase text-xs font-bold text-gray-500">${key}</span>
+                        <span class="w-2 h-2 rounded-full ${val > 50 ? 'bg-yellow-400' : 'bg-green-400'}"></span>
+                    </div>
+                    <div class="text-xl font-bold text-gray-800">${val} <span class="text-xs font-normal text-gray-400">µg/m³</span></div>
+                </div>
+            `).join('');
+
+            // 3. Weekly Cards
+            const weekGrid = document.getElementById('weekly-cards');
+            weekGrid.innerHTML = mockWeeklyData.map(day => {
+                const c = getAQIColor(day.aqi);
+                return `
+                <div class="flex flex-col items-center p-3 rounded-xl border border-gray-100 hover:border-blue-200 transition-colors cursor-pointer bg-gray-50">
+                    <span class="text-gray-500 text-sm font-medium mb-1">${day.day}</span>
+                    <span class="text-lg font-bold ${c.textClass}">${day.aqi}</span>
+                    <span class="text-xs text-gray-400 mt-1">PM2.5: ${day.pm25}</span>
+                </div>`;
+            }).join('');
+
+            // 4. Charts
+            initHourlyChart();
+            initWeeklyChart();
+            
+            // 5. Init Icons
+            lucide.createIcons();
+        }
+
+        function initHourlyChart() {
+            const ctx = document.getElementById('hourlyChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: mockHourlyData.map(d => d.time),
+                    datasets: [{
+                        label: 'AQI',
+                        data: mockHourlyData.map(d => d.aqi),
+                        backgroundColor: mockHourlyData.map(d => getAQIColor(d.aqi).hex),
+                        borderRadius: 4,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { display: false } },
+                        y: { grid: { display: false }, beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        function initWeeklyChart() {
+            const ctx = document.getElementById('weeklyChart').getContext('2d');
+            
+            // Create Gradient
+            const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+            gradient.addColorStop(0, 'rgba(239, 68, 68, 0.5)');
+            gradient.addColorStop(1, 'rgba(239, 68, 68, 0)');
+
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: mockWeeklyData.map(d => d.day),
+                    datasets: [{
+                        label: 'AQI',
+                        data: mockWeeklyData.map(d => d.aqi),
+                        borderColor: '#ef4444',
+                        backgroundColor: gradient,
+                        fill: true,
+                        tension: 0.4,
+                        pointBackgroundColor: '#fff',
+                        pointBorderColor: '#ef4444',
+                        pointRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { display: false } },
+                        y: { grid: { borderDash: [4, 4] }, beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        // Run on load
+        window.onload = renderDashboard;
+    </script>
+</body>
+</html>
