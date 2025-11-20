@@ -5,17 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AirGuard Pro Dashboard</title>
     
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    
-    <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- Cal-Heatmap Dependencies -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/cal-heatmap@4.2.4/dist/cal-heatmap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/cal-heatmap@4.2.4/dist/plugins/Tooltip.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cal-heatmap@4.2.4/dist/cal-heatmap.css">
 
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        /* Tùy chỉnh màu chữ tháng */
+        .ch-domain-text { fill: #6b7280 !important; font-size: 12px; }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800 pb-10 min-h-screen">
@@ -29,7 +33,6 @@
                 </div>
                 <h1 class="text-xl font-bold text-gray-800 hidden sm:block">AirGuard Pro</h1>
             </div>
-            
             <div class="flex items-center gap-2 bg-gray-100 px-3 py-1.5 rounded-full">
                 <i data-lucide="map-pin" class="text-gray-500 w-4 h-4"></i>
                 <span class="font-medium text-sm" id="location-text">Loading...</span>
@@ -41,21 +44,14 @@
         
         <!-- 1. CURRENT STATUS -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <!-- Main AQI Card -->
             <div class="md:col-span-2 bg-white rounded-2xl shadow-sm p-6 flex flex-col sm:flex-row items-center justify-between relative overflow-hidden">
-                <!-- Dynamic Color Bar -->
                 <div id="aqi-bar" class="absolute top-0 left-0 w-2 h-full bg-gray-200"></div>
-                
                 <div class="z-10 text-center sm:text-left w-full sm:w-auto">
                     <h2 class="text-gray-500 font-medium mb-1">Chất lượng không khí hiện tại</h2>
                     <div class="text-5xl font-bold mb-2" id="current-aqi">--</div>
-                    <div id="current-status-badge" class="inline-block px-3 py-1 rounded-full text-sm font-bold mb-4 bg-gray-200">
-                        --
-                    </div>
+                    <div id="current-status-badge" class="inline-block px-3 py-1 rounded-full text-sm font-bold mb-4 bg-gray-200">--</div>
                     <p class="text-sm text-gray-400">Cập nhật: <span id="update-time">--</span></p>
                 </div>
-
-                <!-- Weather Stats Grid -->
                 <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-6 sm:mt-0 z-10 w-full sm:w-auto">
                     <div class="bg-gray-50 p-3 rounded-xl flex items-center gap-3">
                         <i data-lucide="thermometer" class="text-orange-500"></i>
@@ -80,19 +76,17 @@
                     </div>
                 </div>
             </div>
-
-            <!-- Recommendation Card -->
             <div class="bg-blue-50 border border-blue-100 rounded-2xl p-6 flex flex-col justify-center">
                 <h3 class="flex items-center gap-2 font-bold text-blue-800 mb-3">
-                    <i data-lucide="info" class="w-4 h-4"></i> Khuyến nghị ngay
+                    <i data-lucide="info" class="w-4 h-4"></i> Khuyến nghị
                 </h3>
                 <p class="text-sm text-blue-900 leading-relaxed">
-                    Chất lượng không khí đang ở mức kém. Người nhạy cảm nên hạn chế ra ngoài. Hãy bật máy lọc không khí nếu có.
+                    Chất lượng không khí đang ở mức kém. Người nhạy cảm nên hạn chế ra ngoài.
                 </p>
             </div>
         </div>
 
-        <!-- 2. 24H FORECAST (Bar Chart) -->
+        <!-- 2. 24H FORECAST -->
         <div class="bg-white rounded-2xl shadow-sm p-6">
             <div class="flex justify-between items-center mb-6">
                 <h3 class="font-bold text-lg flex items-center gap-2">
@@ -100,12 +94,10 @@
                     Diễn biến 24 giờ tới
                 </h3>
             </div>
-            <div class="h-52 w-full relative">
-                <canvas id="hourlyChart"></canvas>
-            </div>
+            <div class="h-52 w-full relative"><canvas id="hourlyChart"></canvas></div>
         </div>
 
-        <!-- 3. 7-DAY FORECAST (Area Chart) -->
+        <!-- 3. 7-DAY FORECAST -->
         <div class="bg-white rounded-2xl shadow-sm p-6">
             <div class="flex justify-between items-center mb-6">
                 <h3 class="font-bold text-lg flex items-center gap-2">
@@ -113,87 +105,56 @@
                     Dự báo 7 ngày tới
                 </h3>
             </div>
-            
-            <div class="h-64 w-full relative">
-                <canvas id="weeklyChart"></canvas>
-            </div>
+            <div class="h-64 w-full relative"><canvas id="weeklyChart"></canvas></div>
+            <div id="weekly-cards" class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2 mt-6"></div>
+        </div>
 
-            <!-- Weekly Cards Container -->
-            <div id="weekly-cards" class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2 mt-6">
-                <!-- JS will inject items here -->
+        <!-- 4. CAL-HEATMAP (NEW) -->
+        <div class="bg-white rounded-2xl shadow-sm p-6 overflow-x-auto">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="font-bold text-lg flex items-center gap-2">
+                    <i data-lucide="calendar-range" class="text-blue-600"></i>
+                    Lịch sử AQI
+                </h3>
+            </div>
+            <div id="cal-heatmap" class="flex justify-center sm:justify-start"></div>
+            <div class="flex justify-end gap-2 items-center mt-4 text-xs text-gray-500">
+                <span>Thấp</span>
+                <div class="h-2 w-28 bg-gradient-to-r from-green-500 via-yellow-400 to-purple-600 rounded-full"></div>
+                <span>Cao</span>
             </div>
         </div>
 
-        <!-- 4. POLLUTANTS & WARNINGS -->
+        <!-- 5. POLLUTANTS & WARNINGS -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <!-- Pollutants -->
             <div class="bg-white rounded-2xl shadow-sm p-6">
                 <h3 class="font-bold text-lg mb-4">Chi tiết chất gây ô nhiễm</h3>
-                <div id="pollutants-grid" class="grid grid-cols-2 gap-4">
-                    <!-- JS will inject items here -->
-                </div>
+                <div id="pollutants-grid" class="grid grid-cols-2 gap-4"></div>
             </div>
-
-            <!-- Warnings -->
             <div class="bg-white rounded-2xl shadow-sm p-6 border-l-4 border-red-500">
                 <h3 class="font-bold text-lg mb-4 flex items-center gap-2 text-red-600">
                     <i data-lucide="alert-triangle"></i>
-                    Cảnh báo cao điểm
+                    Cảnh báo
                 </h3>
                 <div class="space-y-4">
                     <div class="flex gap-3 items-start">
                         <div class="bg-red-100 text-red-600 p-2 rounded-full text-xs font-bold whitespace-nowrap">T7 - 16:00</div>
                         <div>
-                            <p class="font-medium text-gray-800">Dự báo bụi mịn tăng cao</p>
-                            <p class="text-sm text-gray-500">Dự kiến đạt mức "Rất xấu" vào cuối tuần.</p>
-                        </div>
-                    </div>
-                    <hr class="border-gray-100"/>
-                    <div class="flex gap-3 items-start">
-                        <div class="bg-orange-100 text-orange-600 p-2 rounded-full text-xs font-bold whitespace-nowrap">Hôm nay</div>
-                        <div>
-                            <p class="font-medium text-gray-800">Tia UV mức trung bình</p>
-                            <p class="text-sm text-gray-500">Chỉ số UV tăng nhẹ vào buổi trưa.</p>
+                            <p class="font-medium text-gray-800">Bụi mịn tăng cao</p>
+                            <p class="text-sm text-gray-500">Dự kiến đạt mức "Rất xấu".</p>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-
     </main>
 
     <script>
-        // --- MOCK DATA ---
-        const mockCurrentData = {
-            location: "Hà Nội, Việt Nam",
-            aqi: 156,
-            status: "Kém",
-            temp: 28,
-            humidity: 65,
-            wind: 12,
-            weather: "Có mây",
-            updated: "10 phút trước",
-            pollutants: { pm25: 68.5, pm10: 90.2, o3: 15.4, no2: 22.1 }
-        };
+        const API_URL = "/api/air-quality";
+        let hourlyChartInstance = null;
+        let weeklyChartInstance = null;
+        let cal = null; // Global cal-heatmap instance
 
-        const mockWeeklyData = [
-            { day: 'T2', aqi: 156, pm25: 68 },
-            { day: 'T3', aqi: 142, pm25: 55 },
-            { day: 'T4', aqi: 95, pm25: 32 },
-            { day: 'T5', aqi: 88, pm25: 28 },
-            { day: 'T6', aqi: 110, pm25: 40 },
-            { day: 'T7', aqi: 165, pm25: 75 },
-            { day: 'CN', aqi: 180, pm25: 85 },
-        ];
-
-        // 24h Data Generation
-        const mockHourlyData = Array.from({ length: 24 }, (_, i) => {
-            const hour = (new Date().getHours() + i) % 24;
-            const aqi = 100 + Math.floor(Math.sin(i / 3) * 40) + Math.floor(Math.random() * 20);
-            return { time: `${hour}:00`, aqi: aqi > 0 ? aqi : 20 };
-        });
-
-        // --- HELPERS ---
         function getAQIColor(aqi) {
             if (aqi <= 50) return { bg: 'bg-green-500', text: 'text-white', hex: '#22c55e', textClass: 'text-green-600' };
             if (aqi <= 100) return { bg: 'bg-yellow-400', text: 'text-black', hex: '#facc15', textClass: 'text-yellow-600' };
@@ -202,117 +163,170 @@
             return { bg: 'bg-purple-600', text: 'text-white', hex: '#9333ea', textClass: 'text-purple-700' };
         }
 
-        // --- RENDER FUNCTIONS ---
-        function renderDashboard() {
-            // 1. Header & Current Stats
-            document.getElementById('location-text').innerText = mockCurrentData.location;
-            document.getElementById('current-aqi').innerText = mockCurrentData.aqi;
-            
-            const colors = getAQIColor(mockCurrentData.aqi);
-            const statusBadge = document.getElementById('current-status-badge');
-            statusBadge.innerText = mockCurrentData.status;
-            statusBadge.className = `inline-block px-3 py-1 rounded-full text-sm font-bold mb-4 ${colors.bg} ${colors.text}`;
-            
-            document.getElementById('aqi-bar').className = `absolute top-0 left-0 w-2 h-full ${colors.bg}`;
-            document.getElementById('update-time').innerText = mockCurrentData.updated;
-            document.getElementById('temp').innerText = mockCurrentData.temp;
-            document.getElementById('humidity').innerText = mockCurrentData.humidity;
-            document.getElementById('weather-desc').innerText = mockCurrentData.weather;
-
-            // 2. Pollutants
-            const pollGrid = document.getElementById('pollutants-grid');
-            pollGrid.innerHTML = Object.entries(mockCurrentData.pollutants).map(([key, val]) => `
-                <div class="p-4 rounded-xl bg-gray-50 border border-gray-100">
-                    <div class="flex justify-between items-start mb-2">
-                        <span class="uppercase text-xs font-bold text-gray-500">${key}</span>
-                        <span class="w-2 h-2 rounded-full ${val > 50 ? 'bg-yellow-400' : 'bg-green-400'}"></span>
-                    </div>
-                    <div class="text-xl font-bold text-gray-800">${val} <span class="text-xs font-normal text-gray-400">µg/m³</span></div>
-                </div>
-            `).join('');
-
-            // 3. Weekly Cards
-            const weekGrid = document.getElementById('weekly-cards');
-            weekGrid.innerHTML = mockWeeklyData.map(day => {
-                const c = getAQIColor(day.aqi);
-                return `
-                <div class="flex flex-col items-center p-3 rounded-xl border border-gray-100 hover:border-blue-200 transition-colors cursor-pointer bg-gray-50">
-                    <span class="text-gray-500 text-sm font-medium mb-1">${day.day}</span>
-                    <span class="text-lg font-bold ${c.textClass}">${day.aqi}</span>
-                    <span class="text-xs text-gray-400 mt-1">PM2.5: ${day.pm25}</span>
-                </div>`;
-            }).join('');
-
-            // 4. Charts
-            initHourlyChart();
-            initWeeklyChart();
-            
-            // 5. Init Icons
-            lucide.createIcons();
+        async function fetchAirQuality() {
+            const res = await fetch(API_URL);
+            if (!res.ok) throw new Error(`Failed: ${res.status}`);
+            return res.json();
         }
 
-        function initHourlyChart() {
+        // --- RENDERERS ---
+        function renderCurrent(current) {
+            if(!current) return;
+            document.getElementById('location-text').innerText = current.location || "Đang tải...";
+            document.getElementById('current-aqi').innerText = current.aqi ?? "--";
+            
+            const colors = getAQIColor(current.aqi || 0);
+            const badge = document.getElementById('current-status-badge');
+            badge.innerText = current.status || "--";
+            badge.className = `inline-block px-3 py-1 rounded-full text-sm font-bold mb-4 ${colors.bg} ${colors.text}`;
+            
+            document.getElementById('aqi-bar').className = `absolute top-0 left-0 w-2 h-full ${colors.bg}`;
+            document.getElementById('update-time').innerText = current.updated || "--";
+            document.getElementById('temp').innerText = current.temp ?? "--";
+            document.getElementById('humidity').innerText = current.humidity ?? "--";
+            document.getElementById('weather-desc').innerText = current.weather ?? "--";
+
+            const pollGrid = document.getElementById('pollutants-grid');
+            pollGrid.innerHTML = Object.entries(current.pollutants || {}).map(([k, v]) => `
+                <div class="p-4 rounded-xl bg-gray-50 border border-gray-100">
+                    <div class="flex justify-between items-start mb-2">
+                        <span class="uppercase text-xs font-bold text-gray-500">${k}</span>
+                        <span class="w-2 h-2 rounded-full ${v > 50 ? 'bg-yellow-400' : 'bg-green-400'}"></span>
+                    </div>
+                    <div class="text-xl font-bold text-gray-800">${v} <span class="text-xs font-normal text-gray-400">µg/m³</span></div>
+                </div>`).join('');
+        }
+
+        function renderWeeklyCards(weekly) {
+            const grid = document.getElementById('weekly-cards');
+            if (!weekly?.length) return grid.innerHTML = '<div class="text-sm text-gray-400">No Data</div>';
+            grid.innerHTML = weekly.map(d => {
+                const c = getAQIColor(d.aqi || 0);
+                const date = new Date(d.date).toLocaleDateString('vi-VN', {weekday: 'short'});
+                return `<div class="flex flex-col items-center p-3 rounded-xl border border-gray-100 bg-gray-50">
+                    <span class="text-gray-500 text-sm font-medium mb-1">${date}</span>
+                    <span class="text-lg font-bold ${c.textClass}">${d.aqi}</span>
+                    <span class="text-xs text-gray-400 mt-1">${d.date}</span>
+                </div>`;
+            }).join('');
+        }
+
+        function renderHeatmap(daily) {
+            const container = document.getElementById('cal-heatmap');
+            if (typeof CalHeatmap === "undefined") {
+                container.innerHTML = "<div class='text-sm text-red-500'>Cal-Heatmap chưa sẵn sàng.</div>";
+                return;
+            }
+            if (!daily?.length) {
+                container.innerHTML = "<div class='text-sm text-gray-400'>Chưa có dữ liệu lịch sử</div>";
+                return;
+            }
+
+            const series = daily.map(i => ({
+                date: new Date(i.date || i.timestamp || i.day),
+                value: i.avg_aqi ?? i.aqi ?? 0
+            })).filter(i => !Number.isNaN(i.date.getTime()));
+
+            console.log(series)
+
+            if (!series.length) {
+                container.innerHTML = "<div class='text-sm text-gray-400'>Dữ liệu lịch sử không hợp lệ</div>";
+                return;
+            }
+
+            const minDate = new Date(Math.min(...series.map(i => i.date.getTime())));
+            const maxDate = new Date(Math.max(...series.map(i => i.date.getTime())));
+
+            const monthDiff = (maxDate.getFullYear() - minDate.getFullYear()) * 12 + (maxDate.getMonth() - minDate.getMonth());
+            const rangeMonths = Math.max(1, monthDiff + 1);
+
+            if (cal) cal.destroy();
+            cal = new CalHeatmap();
+
+            cal.paint({
+                itemSelector: '#cal-heatmap',
+                range: rangeMonths,
+                domain: { type: 'month', label: { position: 'top' } },
+                subDomain: { type: 'day', radius: 2, width: 14, height: 14, gutter: 3 },
+                date: { start: new Date(minDate.getFullYear(), 1, 1) },
+                data: { source: series, x: 'date', y: 'value' },
+                scale: {
+                    color: {
+                        type: 'threshold',
+                        domain: [50, 100, 150, 200],
+                        range: ['#22c55e', '#facc15', '#f97316', '#ef4444', '#9333ea']
+                    }
+                },
+                theme: 'light'
+            }
+        );
+        }
+
+        // --- CHARTS ---
+        function initHourlyChart(hourly) {
             const ctx = document.getElementById('hourlyChart').getContext('2d');
-            new Chart(ctx, {
+            if (hourlyChartInstance) hourlyChartInstance.destroy();
+            if (!hourly?.length) return;
+
+            hourlyChartInstance = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: mockHourlyData.map(d => d.time),
+                    labels: hourly.map(d => d.time || new Date(d.timestamp).getHours() + ":00"),
                     datasets: [{
-                        label: 'AQI',
-                        data: mockHourlyData.map(d => d.aqi),
-                        backgroundColor: mockHourlyData.map(d => getAQIColor(d.aqi).hex),
-                        borderRadius: 4,
+                        data: hourly.map(d => d.aqi),
+                        backgroundColor: hourly.map(d => getAQIColor(d.aqi).hex),
+                        borderRadius: 4
                     }]
                 },
                 options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
+                    responsive: true, maintainAspectRatio: false,
                     plugins: { legend: { display: false } },
-                    scales: {
-                        x: { grid: { display: false } },
-                        y: { grid: { display: false }, beginAtZero: true }
-                    }
+                    scales: { x: { grid: { display: false } }, y: { grid: { display: false } } }
                 }
             });
         }
 
-        function initWeeklyChart() {
+        function initWeeklyChart(weekly) {
             const ctx = document.getElementById('weeklyChart').getContext('2d');
-            
-            // Create Gradient
+            if (weeklyChartInstance) weeklyChartInstance.destroy();
+            if (!weekly?.length) return;
+
             const gradient = ctx.createLinearGradient(0, 0, 0, 400);
             gradient.addColorStop(0, 'rgba(239, 68, 68, 0.5)');
             gradient.addColorStop(1, 'rgba(239, 68, 68, 0)');
 
-            new Chart(ctx, {
+            weeklyChartInstance = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: mockWeeklyData.map(d => d.day),
+                    labels: weekly.map(d => new Date(d.date).toLocaleDateString('vi-VN', {weekday: 'short'})),
                     datasets: [{
-                        label: 'AQI',
-                        data: mockWeeklyData.map(d => d.aqi),
-                        borderColor: '#ef4444',
-                        backgroundColor: gradient,
-                        fill: true,
-                        tension: 0.4,
-                        pointBackgroundColor: '#fff',
-                        pointBorderColor: '#ef4444',
-                        pointRadius: 4
+                        data: weekly.map(d => d.aqi),
+                        borderColor: '#ef4444', backgroundColor: gradient, fill: true, tension: 0.4,
+                        pointBackgroundColor: '#fff', pointBorderColor: '#ef4444'
                     }]
                 },
                 options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
+                    responsive: true, maintainAspectRatio: false,
                     plugins: { legend: { display: false } },
-                    scales: {
-                        x: { grid: { display: false } },
-                        y: { grid: { borderDash: [4, 4] }, beginAtZero: true }
-                    }
+                    scales: { x: { grid: { display: false } }, y: { borderDash: [4, 4], beginAtZero: true } }
                 }
             });
         }
 
-        // Run on load
+        async function renderDashboard() {
+            try {
+                const data = await fetchAirQuality();
+                if (data?.status === "loading") return document.getElementById('location-text').innerText = "Đang tải...";
+                
+                renderCurrent(data.current);
+                renderWeeklyCards(data.forecast_7d);
+                initHourlyChart(data.forecast_24h);
+                initWeeklyChart(data.forecast_7d);
+                renderHeatmap(data.heatmap_daily);
+                lucide.createIcons();
+            } catch (e) { console.error(e); }
+        }
+
         window.onload = renderDashboard;
     </script>
 </body>
