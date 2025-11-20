@@ -4,6 +4,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 import pandas as pd
 import datetime
+import re
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from contextlib import asynccontextmanager
@@ -11,11 +12,10 @@ from contextlib import asynccontextmanager
 from utils.cron_job import CronJob
 from utils.model import ForecastModel, MockForcastModel
 
-
 # ---- CONFIG ----
 CITY_SLUG = "ho-chi-minh-city"
 BASE_URL = (
-    "https://raw.githubusercontent.com/nghiahsgs/iqair-dataset"
+    "https://raw.githubusercontent.com/HiAmNear/iqair-crawling"
     "/refs/heads/main/result/{city}/aqi_{city}_{year}_{month}.csv"
 )
 
@@ -52,7 +52,7 @@ all_urls = build_month_urls(CITY_SLUG, YEAR)
 CSV_URL = all_urls[-1]
 
 # Các URL lịch sử (từ Jan đến trước tháng hiện tại)
-HISTORY_CSV_URLS = all_urls[:-1]
+HISTORY_CSV_URLS = all_urls
 
 TARGET_CITY = "Hồ Chí Minh"  # vẫn giữ như cũ
 
@@ -68,6 +68,9 @@ global_data = {
 
 cron_job = CronJob(CSV_URL, history_urls=HISTORY_CSV_URLS)
 
+def extract_weather(icon_str):
+    match = re.search(r"ic-w-\d{2}-([a-z-]+)-full", str(icon_str))
+    return match.group(1) if match else "Không xác định"
 
 def fetch_and_process_data(scope: str = "current"):
     """
@@ -116,6 +119,9 @@ def fetch_and_process_data(scope: str = "current"):
         if not valid_rows.empty:
             latest_valid = valid_rows.iloc[-1]
             latest_aqi = latest_valid["aqi"]
+            latest_windspeed = latest_valid["wind_speed"]
+            latest_humidity = latest_valid["humidity"]
+            latest_weather = extract_weather(latest_valid["weather_icon"])
             aqi_value = int(latest_aqi)
             status = "Kém" if aqi_value > 100 else "Tốt"
             updated_time = latest_valid["timestamp"].strftime("%H:%M %d/%m")
@@ -123,12 +129,18 @@ def fetch_and_process_data(scope: str = "current"):
             # Không có aqi thật, chỉ có timestamp giả
             latest_any = hcm_df.iloc[-1]
             aqi_value = None
+            latest_windspeed = None
+            latest_humidity = None
+            latest_weather = None
             status = "Không có dữ liệu"
             updated_time = latest_any["timestamp"].strftime("%H:%M %d/%m")
 
         global_data["current"] = {
             "location": f"{TARGET_CITY}, Vietnam",
             "aqi": aqi_value,
+            "windspeed": latest_windspeed,
+            "humidity": latest_humidity,            
+            "weather": latest_weather,
             "status": status,
             "updated": updated_time,
         }
