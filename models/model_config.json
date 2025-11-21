@@ -1,0 +1,20 @@
+{
+    "features": [
+        "hour",
+        "day_of_week",
+        "is_weekend",
+        "time_of_day",
+        "wind_speed_value",
+        "humidity_ratio",
+        "weather_type",
+        "is_peak_hour",
+        "season",
+        "day_progress",
+        "city_aqi_std",
+        "humidity_level",
+        "wind_category"
+    ],
+    "window_size": 6,
+    "scaler_type": "MinMax",
+    "model_type": "LSTM"
+}
