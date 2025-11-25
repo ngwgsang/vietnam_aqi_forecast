@@ -5,12 +5,14 @@ from fastapi.staticfiles import StaticFiles
 import pandas as pd
 import datetime
 import re
+import os  # <--- [ADD] Cần thiết để xử lý đường dẫn model
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from contextlib import asynccontextmanager
 
 from utils.cron_job import CronJob
-from utils.model import ForecastModel, MockForcastModel
+# [MOD] Import thêm TCNForecastModel
+from utils.model import ForecastModel, MockForcastModel, TCNForecastModel
 
 # ---- CONFIG ----
 CITY_SLUG = "ho-chi-minh-city"
@@ -18,6 +20,14 @@ BASE_URL = (
     "https://raw.githubusercontent.com/HiAmNear/iqair-crawling"
     "/refs/heads/main/result/{city}/aqi_{city}_{year}_{month}.csv"
 )
+
+# ---- CONFIG MODEL ----
+# [ADD] Cấu hình đường dẫn model
+MODEL_DIR = "./models"
+PATH_TCN_24H = os.path.join(MODEL_DIR, "tcn_GLOBAL_task_24h_global.h5")
+PATH_TCN_7D = os.path.join(MODEL_DIR, "tcn_GLOBAL_task_7d_global.h5")
+PATH_SCALER = os.path.join(MODEL_DIR, "scaler.pkl")
+
 
 # Map số tháng -> suffix trong tên file
 MONTH_SLUGS = [
@@ -161,15 +171,32 @@ def fetch_and_process_data(scope: str = "current"):
             global_data["heatmap_daily"] = daily.to_dict("records")
 
         # 7. Forecasts: dùng dữ liệu đã làm sạch (chỉ non-NaN)
-        try:
-            clean_df = valid_rows
-            if clean_df.empty:
-                raise ValueError("Không có giá trị AQI hợp lệ để train model.")
-            model = ForecastModel(clean_df)
-        except Exception as e:
-            print(f"[FORECAST] Lỗi khi khởi tạo ForecastModel: {e}")
-            model = MockForcastModel()
+        # [MOD] Sửa logic chọn model: TCN -> Baseline -> Mock
+        model = None
+        clean_df = valid_rows
 
+        if clean_df.empty:
+            print("[FORECAST] Không có dữ liệu sạch, dùng Mock.")
+            model = MockForcastModel()
+        else:
+            # Ưu tiên 1: TCN (Deep Learning)
+            try:
+                # Kiểm tra xem model TCN đã load chưa (qua biến class level)
+                # TCNForecastModel sẽ tự check trong __init__, nếu chưa load artifacts sẽ raise error
+                model = TCNForecastModel(clean_df)
+                print("[FORECAST] Đang sử dụng model TCN (Deep Learning)")
+            except Exception as e_tcn:
+                print(f"[FORECAST] Không thể dùng TCN ({e_tcn}). Chuyển sang Baseline.")
+                
+                # Ưu tiên 2: ForecastModel (Baseline Linear Trend)
+                try:
+                    model = ForecastModel(clean_df)
+                    print("[FORECAST] Đang sử dụng ForecastModel (Baseline)")
+                except Exception as e_base:
+                    print(f"[FORECAST] Lỗi Baseline ({e_base}). Chuyển sang Mock.")
+                    model = MockForcastModel()
+
+        # Thực hiện dự báo với model đã chọn
         try:
             global_data["forecast_24h"] = model.do_forecast_aqi_24h()
         except Exception as e:
@@ -189,13 +216,24 @@ def fetch_and_process_data(scope: str = "current"):
         print(f"Lỗi khi fetch data: {e}")
 
 
-
 # --- SCHEDULER SETUP ---
 scheduler = BackgroundScheduler()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # [ADD] 0. Load Model Deep Learning vào RAM 1 lần duy nhất khi khởi động
+    # Kiểm tra file tồn tại trước khi load để tránh crash app nếu chưa copy file
+    if os.path.exists(PATH_TCN_24H) and os.path.exists(PATH_TCN_7D) and os.path.exists(PATH_SCALER):
+        try:
+            print("📥 Đang load TCN Model & Scaler...")
+            TCNForecastModel.load_artifacts(PATH_TCN_24H, PATH_TCN_7D, PATH_SCALER)
+            print("✅ Load model thành công.")
+        except Exception as e:
+            print(f"❌ Lỗi khi load model: {e}. App sẽ chạy bằng model Baseline/Mock.")
+    else:
+        print("⚠️ Không tìm thấy file model trong thư mục ./models. App sẽ chạy bằng model Baseline.")
+
     # 1. Chạy ngay khi app khởi động (Lấy lịch sử + hiện tại)
     fetch_and_process_data(scope="history")
 
@@ -235,5 +273,5 @@ async def get_air_quality():
         "heatmap_daily": global_data["heatmap_daily"],
         "last_updated": global_data["last_updated"],
     }
-    print(repsonse)
+    # print(repsonse) # Comment bớt log cho đỡ rác console
     return repsonse
