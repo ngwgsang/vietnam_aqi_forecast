@@ -1,92 +1,92 @@
-# utils/cron_job.py
 import pandas as pd
-import datetime
 import requests
-
-MONTH_SLUGS = [
-    "jan", "feb", "mar", "apr", "may", "jun",
-    "jul", "aug", "sep", "oct", "nov", "dec"
-]
-MONTH_MAP = {slug: i + 1 for i, slug in enumerate(MONTH_SLUGS)}
-
-TARGET_CITY = "Hồ Chí Minh"  # hoặc import từ config nếu muốn
+import os
+import io
+import datetime
 
 class CronJob:
-    def __init__(self, url, history_urls=None):
-        self.url = url
+    def __init__(self, current_url, history_urls=None, cache_dir="cache"):
+        self.current_url = current_url
         self.history_urls = history_urls or []
+        self.cache_dir = cache_dir
+        
+        if not os.path.exists(self.cache_dir):
+            os.makedirs(self.cache_dir)
 
-    # --- Hàm đọc CSV an toàn ---
-    def _safe_read_csv(self, url: str) -> pd.DataFrame:
+    def fetch(self):
+        """Lấy dữ liệu hiện tại từ URL"""
         try:
-            # Kiểm tra tồn tại nhanh (HEAD)
-            resp = requests.head(url, timeout=5)
-            if resp.status_code != 200:
-                print(f"[WARN] {url} trả về {resp.status_code}. Sinh DataFrame giả.")
-                return self._empty_month_df_from_url(url)
-
-            return pd.read_csv(url)
+            print(f"Fetching: {self.current_url}")
+            response = requests.get(self.current_url)
+            if response.status_code == 200:
+                df = pd.read_csv(io.StringIO(response.text))
+                return df
+            else:
+                print(f"[WARN] {self.current_url} trả về {response.status_code}")
+                return pd.DataFrame()
         except Exception as e:
-            print(f"[WARN] Không đọc được {url}: {e}. Sinh DataFrame giả.")
-            return self._empty_month_df_from_url(url)
+            print(f"Lỗi fetch: {e}")
+            return pd.DataFrame()
 
-    # --- Sinh DataFrame giả nếu không có CSV ---
-    def _empty_month_df_from_url(self, url: str) -> pd.DataFrame:
+    def build_history_csv(self, filename="history.csv"):
         """
-        Parse url dạng: .../aqi_ho-chi-minh-city_2025_may.csv
-        → tạo hourly timestamp trong tháng đó, aqi = None
+        [MODIFIED] Hàm này đã được cập nhật để nhận tham số filename
+        Gộp tất cả các file lịch sử lại và lưu vào cache với tên file chỉ định.
         """
-        fname = url.split("/")[-1]  # aqi_ho-chi-minh-city_2025_may.csv
-        base = fname.replace(".csv", "")
-        parts = base.split("_")     # ['aqi', 'ho-chi-minh-city', '2025', 'may']
-
-        if len(parts) < 4:
-            # fallback: DataFrame rỗng nhưng đúng schema
-            return pd.DataFrame(columns=["city", "timestamp", "aqi"])
-
-        year = int(parts[-2])
-        month_slug = parts[-1]
-        month = MONTH_MAP.get(month_slug)
-
-        if month is None:
-            return pd.DataFrame(columns=["city", "timestamp", "aqi"])
-
-        start = datetime.datetime(year, month, 1)
-        # tính ngày đầu tháng tiếp theo
-        if month == 12:
-            end = datetime.datetime(year + 1, 1, 1)
-        else:
-            end = datetime.datetime(year, month + 1, 1)
-
-        # tạo timestamp theo giờ
-        idx = pd.date_range(start, end - datetime.timedelta(hours=1), freq="1H")
-
-        df = pd.DataFrame({
-            "city": [TARGET_CITY] * len(idx),
-            "timestamp": idx,
-            "aqi": [None] * len(idx),  # aqi = None như yêu cầu
-        })
-        return df
-
-    def fetch(self) -> pd.DataFrame:
-        return self._safe_read_csv(self.url)
-
-    def build_history_csv(self):
-        dfs = []
-
+        all_dfs = []
+        
+        # 1. Duyệt qua list URL lịch sử
         for url in self.history_urls:
-            df = self._safe_read_csv(url)
-            # vẫn append cả DataFrame “giả” (aqi=None) để giữ timeline đầy đủ
-            if df is not None and not df.empty:
-                dfs.append(df)
+            try:
+                # print(f"   -> Gộp lịch sử: {url}")
+                resp = requests.get(url)
+                if resp.status_code == 200:
+                    temp_df = pd.read_csv(io.StringIO(resp.text))
+                    all_dfs.append(temp_df)
+                else:
+                    # Nếu 404 (thường gặp với city mới chưa có data tháng cũ)
+                    # print(f"[WARN] Bỏ qua {url} (404)")
+                    pass
+            except Exception as e:
+                print(f"Lỗi gộp {url}: {e}")
 
-        if not dfs:
-            print("[HISTORY] Không có lịch sử (tất cả file đều lỗi).")
+        # 2. Nếu không có dữ liệu nào (City mới tinh hoặc lỗi mạng toàn bộ)
+        if not all_dfs:
+            print(f"[INFO] Không tìm thấy dữ liệu lịch sử nào hợp lệ. Tạo data giả để không crash app.")
+            return self._create_dummy_dataframe(), None
+
+        # 3. Gộp và lưu file
+        try:
+            final_df = pd.concat(all_dfs, ignore_index=True)
+            
+            # Xử lý sơ bộ: Xóa trùng lặp thời gian
+            if "timestamp" in final_df.columns:
+                final_df["timestamp"] = pd.to_datetime(final_df["timestamp"], errors='coerce', utc=True)
+                final_df = final_df.dropna(subset=["timestamp"])
+                final_df = final_df.sort_values("timestamp").drop_duplicates(subset=["timestamp"], keep="last")
+
+            save_path = os.path.join(self.cache_dir, filename)
+            final_df.to_csv(save_path, index=False)
+            return final_df, save_path
+            
+        except Exception as e:
+            print(f"Lỗi khi concat/save history: {e}")
             return None, None
 
-        history_df = pd.concat(dfs, ignore_index=True)
-
-        history_path = "cache/history.csv"
-        history_df.to_csv(history_path, index=False)
-
-        return history_df, history_path
+    def _create_dummy_dataframe(self):
+        """Tạo DataFrame giả để app không bị crash khi gặp 404"""
+        # Tạo 24 giờ dữ liệu giả gần nhất
+        end = datetime.datetime.now()
+        start = end - datetime.timedelta(hours=24)
+        # [FIX] Sửa '1H' thành '1h' để tránh FutureWarning
+        idx = pd.date_range(start, end, freq="1h") 
+        
+        df = pd.DataFrame({
+            "timestamp": idx,
+            "city": ["Unknown"] * len(idx),
+            "aqi": [50] * len(idx), # Mặc định tốt
+            "wind_speed": ["0 km/h"] * len(idx),
+            "humidity": ["0%"] * len(idx),
+            "weather_icon": ["/dl/assets/svg/weather/ic-weather-01d.svg"] * len(idx)
+        })
+        return df

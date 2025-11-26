@@ -9,7 +9,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     
-    <!-- Cal-Heatmap Dependencies -->
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/cal-heatmap@4.2.4/dist/cal-heatmap.min.js"></script>
@@ -18,13 +17,11 @@
 
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        /* Tùy chỉnh màu chữ tháng */
         .ch-domain-text { fill: #6b7280 !important; font-size: 12px; }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800 pb-10 min-h-screen">
 
-    <!-- HEADER -->
     <header class="bg-white shadow-sm sticky top-0 z-20">
         <div class="max-w-5xl mx-auto px-4 py-4 flex justify-between items-center">
             <div class="flex items-center gap-2">
@@ -33,16 +30,32 @@
                 </div>
                 <h1 class="text-xl font-bold text-gray-800 hidden sm:block">AirGuard Pro</h1>
             </div>
-            <div class="flex items-center gap-2 bg-gray-100 px-3 py-1.5 rounded-full">
-                <i data-lucide="map-pin" class="text-gray-500 w-4 h-4"></i>
-                <span class="font-medium text-sm" id="location-text">Loading...</span>
+            
+            <div class="flex items-center gap-3">
+                <div class="relative">
+                    <select id="city-select" onchange="changeCity()" class="appearance-none bg-gray-100 border border-gray-200 text-gray-700 py-2 px-4 pr-8 rounded-lg leading-tight focus:outline-none focus:bg-white focus:border-blue-500 font-medium text-sm">
+                        <option value="ho-chi-minh-city">Hồ Chí Minh</option>
+                        <option value="hanoi">Hà Nội</option>
+                        <option value="can-tho">Cần Thơ</option>
+                        <option value="nha-trang">Nha Trang</option>
+                        <option value="hue">Huế</option>
+                        <option value="vinh">Vinh</option>
+                    </select>
+                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                        <i data-lucide="chevron-down" class="w-4 h-4"></i>
+                    </div>
+                </div>
+
+                <div class="hidden sm:flex items-center gap-2 bg-gray-100 px-3 py-1.5 rounded-full">
+                    <i data-lucide="map-pin" class="text-gray-500 w-4 h-4"></i>
+                    <span class="font-medium text-sm" id="location-text">Loading...</span>
+                </div>
             </div>
         </div>
     </header>
 
     <main class="max-w-5xl mx-auto px-4 mt-6 space-y-6">
         
-        <!-- 1. CURRENT STATUS -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div class="md:col-span-2 bg-white rounded-2xl shadow-sm p-6 flex flex-col sm:flex-row items-center justify-between relative overflow-hidden">
                 <div id="aqi-bar" class="absolute top-0 left-0 w-2 h-full bg-gray-200"></div>
@@ -81,42 +94,30 @@
                     <i data-lucide="info" class="w-4 h-4"></i> Khuyến nghị
                 </h3>
                 <p class="text-sm text-blue-900 leading-relaxed">
-                    Chất lượng không khí đang ở mức kém. Người nhạy cảm nên hạn chế ra ngoài.
+                    Theo dõi chỉ số thường xuyên để bảo vệ sức khỏe. Hạn chế ra ngoài khi chỉ số cao.
                 </p>
             </div>
         </div>
 
-        <!-- 2. 24H FORECAST -->
         <div class="bg-white rounded-2xl shadow-sm p-6">
-            <div class="flex justify-between items-center mb-6">
-                <h3 class="font-bold text-lg flex items-center gap-2">
-                    <i data-lucide="clock" class="text-blue-600"></i>
-                    Diễn biến 24 giờ tới
-                </h3>
-            </div>
+            <h3 class="font-bold text-lg flex items-center gap-2 mb-6">
+                <i data-lucide="clock" class="text-blue-600"></i> Diễn biến 24 giờ tới
+            </h3>
             <div class="h-52 w-full relative"><canvas id="hourlyChart"></canvas></div>
         </div>
 
-        <!-- 3. 7-DAY FORECAST -->
         <div class="bg-white rounded-2xl shadow-sm p-6">
-            <div class="flex justify-between items-center mb-6">
-                <h3 class="font-bold text-lg flex items-center gap-2">
-                    <i data-lucide="activity" class="text-blue-600"></i>
-                    Dự báo 7 ngày tới
-                </h3>
-            </div>
+            <h3 class="font-bold text-lg flex items-center gap-2 mb-6">
+                <i data-lucide="activity" class="text-blue-600"></i> Dự báo 7 ngày tới
+            </h3>
             <div class="h-64 w-full relative"><canvas id="weeklyChart"></canvas></div>
             <div id="weekly-cards" class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2 mt-6"></div>
         </div>
 
-        <!-- 4. CAL-HEATMAP (NEW) -->
         <div class="bg-white rounded-2xl shadow-sm p-6 overflow-x-auto">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="font-bold text-lg flex items-center gap-2">
-                    <i data-lucide="calendar-range" class="text-blue-600"></i>
-                    Lịch sử AQI
-                </h3>
-            </div>
+            <h3 class="font-bold text-lg flex items-center gap-2 mb-4">
+                <i data-lucide="calendar-range" class="text-blue-600"></i> Lịch sử AQI
+            </h3>
             <div id="cal-heatmap" class="flex justify-center sm:justify-start"></div>
             <div class="flex justify-end gap-2 items-center mt-4 text-xs text-gray-500">
                 <span>Thấp</span>
@@ -125,27 +126,9 @@
             </div>
         </div>
 
-        <!-- 5. POLLUTANTS & WARNINGS -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div class="bg-white rounded-2xl shadow-sm p-6">
-                <h3 class="font-bold text-lg mb-4">Chi tiết chất gây ô nhiễm</h3>
-                <div id="pollutants-grid" class="grid grid-cols-2 gap-4"></div>
-            </div>
-            <div class="bg-white rounded-2xl shadow-sm p-6 border-l-4 border-red-500">
-                <h3 class="font-bold text-lg mb-4 flex items-center gap-2 text-red-600">
-                    <i data-lucide="alert-triangle"></i>
-                    Cảnh báo
-                </h3>
-                <div class="space-y-4">
-                    <div class="flex gap-3 items-start">
-                        <div class="bg-red-100 text-red-600 p-2 rounded-full text-xs font-bold whitespace-nowrap">T7 - 16:00</div>
-                        <div>
-                            <p class="font-medium text-gray-800">Bụi mịn tăng cao</p>
-                            <p class="text-sm text-gray-500">Dự kiến đạt mức "Rất xấu".</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        <div class="bg-white rounded-2xl shadow-sm p-6 mb-10">
+            <h3 class="font-bold text-lg mb-4">Chi tiết chất gây ô nhiễm</h3>
+            <div id="pollutants-grid" class="grid grid-cols-2 md:grid-cols-4 gap-4"></div>
         </div>
     </main>
 
@@ -153,7 +136,8 @@
         const API_URL = "/api/air-quality";
         let hourlyChartInstance = null;
         let weeklyChartInstance = null;
-        let cal = null; // Global cal-heatmap instance
+        let cal = null;
+        let currentCity = "ho-chi-minh-city"; // Mặc định
 
         function getAQIColor(aqi) {
             if (aqi <= 50) return { bg: 'bg-green-500', text: 'text-white', hex: '#22c55e', textClass: 'text-green-600' };
@@ -163,16 +147,28 @@
             return { bg: 'bg-purple-600', text: 'text-white', hex: '#9333ea', textClass: 'text-purple-700' };
         }
 
+        // [MODIFIED] Fetch data với tham số city
         async function fetchAirQuality() {
-            const res = await fetch(API_URL);
+            const res = await fetch(`${API_URL}?city=${currentCity}`);
             if (!res.ok) throw new Error(`Failed: ${res.status}`);
             return res.json();
         }
 
-        // --- RENDERERS ---
+        // [NEW] Hàm đổi city
+        function changeCity() {
+            const select = document.getElementById('city-select');
+            currentCity = select.value;
+            
+            // Reset UI Loading
+            document.getElementById('location-text').innerText = "Đang tải...";
+            document.getElementById('current-aqi').innerText = "--";
+            
+            renderDashboard();
+        }
+
         function renderCurrent(current) {
             if(!current) return;
-            document.getElementById('location-text').innerText = current.location || "Đang tải...";
+            document.getElementById('location-text').innerText = current.location || "Unknown";
             document.getElementById('current-aqi').innerText = current.aqi ?? "--";
             
             const colors = getAQIColor(current.aqi || 0);
@@ -184,22 +180,28 @@
             document.getElementById('update-time').innerText = current.updated || "--";
             document.getElementById('windspeed').innerText = current.windspeed ?? "--";
             document.getElementById('humidity').innerText = current.humidity ?? "--";
-            document.getElementById('weather-desc').innerText = current.weather ?? "--";
+
+            // [MODIFIED] Hiển thị trực tiếp weather tiếng Việt từ Backend
+            document.getElementById('weather-desc').innerText = current.weather || "Không xác định";
 
             const pollGrid = document.getElementById('pollutants-grid');
-            pollGrid.innerHTML = Object.entries(current.pollutants || {}).map(([k, v]) => `
-                <div class="p-4 rounded-xl bg-gray-50 border border-gray-100">
-                    <div class="flex justify-between items-start mb-2">
-                        <span class="uppercase text-xs font-bold text-gray-500">${k}</span>
-                        <span class="w-2 h-2 rounded-full ${v > 50 ? 'bg-yellow-400' : 'bg-green-400'}"></span>
-                    </div>
-                    <div class="text-xl font-bold text-gray-800">${v} <span class="text-xs font-normal text-gray-400">µg/m³</span></div>
-                </div>`).join('');
+            if(Object.keys(current.pollutants || {}).length === 0) {
+                 pollGrid.innerHTML = '<div class="col-span-4 text-center text-gray-400 text-sm">Chưa có dữ liệu chi tiết</div>';
+            } else {
+                pollGrid.innerHTML = Object.entries(current.pollutants || {}).map(([k, v]) => `
+                    <div class="p-4 rounded-xl bg-gray-50 border border-gray-100">
+                        <div class="flex justify-between items-start mb-2">
+                            <span class="uppercase text-xs font-bold text-gray-500">${k}</span>
+                            <span class="w-2 h-2 rounded-full ${v > 50 ? 'bg-yellow-400' : 'bg-green-400'}"></span>
+                        </div>
+                        <div class="text-xl font-bold text-gray-800">${v} <span class="text-xs font-normal text-gray-400">µg/m³</span></div>
+                    </div>`).join('');
+            }
         }
 
         function renderWeeklyCards(weekly) {
             const grid = document.getElementById('weekly-cards');
-            if (!weekly?.length) return grid.innerHTML = '<div class="text-sm text-gray-400">No Data</div>';
+            if (!weekly?.length) return grid.innerHTML = '<div class="col-span-full text-center text-sm text-gray-400">Đang cập nhật dự báo...</div>';
             grid.innerHTML = weekly.map(d => {
                 const c = getAQIColor(d.aqi || 0);
                 const date = new Date(d.date).toLocaleDateString('vi-VN', {weekday: 'short'});
@@ -214,7 +216,7 @@
         function renderHeatmap(daily) {
             const container = document.getElementById('cal-heatmap');
             if (typeof CalHeatmap === "undefined") {
-                container.innerHTML = "<div class='text-sm text-red-500'>Cal-Heatmap chưa sẵn sàng.</div>";
+                container.innerHTML = "<div class='text-sm text-red-500'>Lỗi thư viện Cal-Heatmap.</div>";
                 return;
             }
             if (!daily?.length) {
@@ -227,16 +229,10 @@
                 value: i.avg_aqi ?? i.aqi ?? 0
             })).filter(i => !Number.isNaN(i.date.getTime()));
 
-            console.log(series)
-
-            if (!series.length) {
-                container.innerHTML = "<div class='text-sm text-gray-400'>Dữ liệu lịch sử không hợp lệ</div>";
-                return;
-            }
+            if (!series.length) return;
 
             const minDate = new Date(Math.min(...series.map(i => i.date.getTime())));
             const maxDate = new Date(Math.max(...series.map(i => i.date.getTime())));
-
             const monthDiff = (maxDate.getFullYear() - minDate.getFullYear()) * 12 + (maxDate.getMonth() - minDate.getMonth());
             const rangeMonths = Math.max(1, monthDiff + 1);
 
@@ -248,7 +244,7 @@
                 range: rangeMonths,
                 domain: { type: 'month', label: { position: 'top' } },
                 subDomain: { type: 'day', radius: 2, width: 14, height: 14, gutter: 3 },
-                date: { start: new Date(minDate.getFullYear(), 1, 1) },
+                date: { start: new Date(minDate.getFullYear(), 1, 1) }, 
                 data: { source: series, x: 'date', y: 'value' },
                 scale: {
                     color: {
@@ -258,11 +254,9 @@
                     }
                 },
                 theme: 'light'
-            }
-        );
+            });
         }
 
-        // --- CHARTS ---
         function initHourlyChart(hourly) {
             const ctx = document.getElementById('hourlyChart').getContext('2d');
             if (hourlyChartInstance) hourlyChartInstance.destroy();
@@ -316,8 +310,17 @@
         async function renderDashboard() {
             try {
                 const data = await fetchAirQuality();
-                if (data?.status === "loading") return document.getElementById('location-text').innerText = "Đang tải...";
                 
+                if (data?.status === "loading") {
+                    document.getElementById('location-text').innerText = "Đang tải dữ liệu...";
+                    return;
+                }
+                
+                if (data?.status === "error") {
+                    alert("Không tìm thấy dữ liệu cho thành phố này.");
+                    return;
+                }
+
                 renderCurrent(data.current);
                 renderWeeklyCards(data.forecast_7d);
                 initHourlyChart(data.forecast_24h);
