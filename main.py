@@ -6,25 +6,30 @@ import pandas as pd
 import datetime
 import re
 import os
+import random  # [NEW] Import random
 from apscheduler.schedulers.background import BackgroundScheduler
 from contextlib import asynccontextmanager
 
 from utils.cron_job import CronJob
 from utils.model import ForecastModel, MockForcastModel, TCNForecastModel
 
+
+APP_SEED = random.randint(0, 1000000)
+print(f"🎲 App Seed initialized: {APP_SEED}")
+
 # ==============================================================================
-# [NEW] CẤU HÌNH THÀNH PHỐ
+# CẤU HÌNH THÀNH PHỐ
 # ==============================================================================
 SUPPORTED_CITIES = {
     "ho-chi-minh-city": "Hồ Chí Minh",
     "hanoi": "Hà Nội",
-    "can-tho": "Cần Thơ",      # [NEW]
-    "nha-trang": "Nha Trang",  # [NEW]
-    "hue": "Huế",              # [NEW]
-    "vinh": "Vinh"             # [NEW]
+    "can-tho": "Cần Thơ",
+    "nha-trang": "Nha Trang",
+    "hue": "Huế",
+    "vinh": "Vinh"
 }
 
-# Template URL chung, {city} sẽ được thay thế
+# Template URL chung
 BASE_URL_TEMPLATE = (
     "https://raw.githubusercontent.com/HiAmNear/iqair-crawling"
     "/refs/heads/main/result/{city}/aqi_{city}_{year}_{month}.csv"
@@ -39,12 +44,11 @@ PATH_SCALER = os.path.join(MODEL_DIR, "scaler.pkl")
 MONTH_SLUGS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
 
 # ==============================================================================
-# [MODIFIED] GLOBAL DATA STORE (Lưu theo từng city)
+# GLOBAL DATA STORE
 # ==============================================================================
-# Cấu trúc: global_data["hanoi"] = { "current": ..., "history": ... }
 global_data = {}
 
-# Khởi tạo khung chứa dữ liệu cho tất cả thành phố
+# Khởi tạo khung chứa dữ liệu
 for slug in SUPPORTED_CITIES.keys():
     global_data[slug] = {
         "current": {},
@@ -57,7 +61,7 @@ for slug in SUPPORTED_CITIES.keys():
 
 
 def extract_weather_vietnamese(icon_str):
-    """[MODIFIED] Hàm dịch thời tiết chuẩn (đã sửa ở bước trước)"""
+    """Hàm dịch thời tiết chuẩn"""
     match = re.search(r"ic-weather-(\d{2})[dn]", str(icon_str))
     if match:
         code_id = match.group(1)
@@ -77,7 +81,7 @@ def extract_weather_vietnamese(icon_str):
 
 
 def build_urls_for_city(city_slug: str, year: int):
-    """[MODIFIED] Tạo URL cho 1 city cụ thể"""
+    """Tạo URL cho 1 city cụ thể"""
     urls = []
     today = datetime.date.today()
     for m in range(1, today.month + 1):
@@ -89,12 +93,12 @@ def build_urls_for_city(city_slug: str, year: int):
 
 def process_city_data(city_slug: str, scope: str = "current"):
     """
-    [MODIFIED] Worker xử lý dữ liệu cho 1 thành phố cụ thể.
+    Worker xử lý dữ liệu cho 1 thành phố cụ thể.
     """
     target_city_name = SUPPORTED_CITIES.get(city_slug, "Unknown")
     print(f"🔄 [UPDATE] Đang xử lý: {target_city_name} ({scope})")
     
-    # 1. Tạo URL và CronJob cho city này
+    # 1. Tạo URL và CronJob
     urls = build_urls_for_city(city_slug, 2025)
     cron_job = CronJob(urls[-1], history_urls=urls)
     
@@ -104,7 +108,6 @@ def process_city_data(city_slug: str, scope: str = "current"):
         
         history_df = None
         if scope == "history":
-            # Lưu file riêng cho từng city để tránh ghi đè
             history_df, _ = cron_job.build_history_csv(filename=f"history_{city_slug}.csv")
         
         df_source = history_df if history_df is not None else df_current
@@ -113,16 +116,10 @@ def process_city_data(city_slug: str, scope: str = "current"):
             print(f"⚠️ [WARN] Không có dữ liệu cho {city_slug}")
             return
 
-        # 3. Lọc dữ liệu theo tên thành phố (Relative filter)
-        # Lưu ý: Data CSV cột 'city' có thể là 'Ho Chi Minh City' hoặc 'Hồ Chí Minh'
-        # Ta lọc lỏng lẻo để bắt được dữ liệu
-        # Nếu file CSV chỉ chứa 1 city thì lấy hết cũng được
-        
-        # Chuẩn hoá timestamp
+        # 3. Xử lý DataFrame
         df_source["timestamp"] = pd.to_datetime(df_source["timestamp"].astype(str), utc=True, errors="coerce")
         df_source["timestamp"] = df_source["timestamp"].dt.tz_convert("Asia/Ho_Chi_Minh").dt.tz_localize(None)
         
-        # Sắp xếp và lấy dòng có AQI
         valid_rows = df_source.dropna(subset=["aqi", "timestamp"]).sort_values("timestamp")
         
         # 4. Xử lý Current Info
@@ -139,7 +136,7 @@ def process_city_data(city_slug: str, scope: str = "current"):
                 "weather": extract_weather_vietnamese(latest.get("weather_icon", "")),
                 "status": "Kém" if aqi > 100 else "Tốt",
                 "updated": latest["timestamp"].strftime("%H:%M %d/%m"),
-                "pollutants": {} # Nếu có data chi tiết thì map vào đây
+                "pollutants": {}
             }
         
         global_data[city_slug]["current"] = current_info
@@ -150,23 +147,46 @@ def process_city_data(city_slug: str, scope: str = "current"):
             daily = valid_rows.assign(date=valid_rows["timestamp"].dt.date).groupby("date")["aqi"].mean().reset_index()
             global_data[city_slug]["heatmap_daily"] = daily.rename(columns={"aqi": "avg_aqi"}).to_dict("records")
 
-        # 6. Forecast
-        # [NOTE] Chỉ HCM mới dùng TCN (nếu model train cho HCM), các city khác dùng Baseline để tránh lỗi
+        # 6. Forecast & Random Noise Application
         clean_df = valid_rows
         model = None
         
         if not clean_df.empty:
             try:
-                # Nếu muốn dùng TCN cho mọi nơi (cần retrain hoặc chấp nhận sai số):
-                # model = TCNForecastModel(clean_df)
-                
-                # Hiện tại fallback về Baseline cho an toàn
+                # Fallback về Baseline cho an toàn với các city chưa có data train
                 model = ForecastModel(clean_df) 
             except Exception:
                 model = MockForcastModel()
             
-            global_data[city_slug]["forecast_24h"] = model.do_forecast_aqi_24h()
-            global_data[city_slug]["forecast_7d"] = model.do_forecast_aqi_7day()
+            # Lấy kết quả dự báo gốc
+            raw_forecast_24h = model.do_forecast_aqi_24h()
+            raw_forecast_7d = model.do_forecast_aqi_7day()
+
+            # ==================================================================
+            # [NEW] LOGIC THÊM NHIỄU RANDOM [-6, +6] CỐ ĐỊNH THEO SESSION
+            # ==================================================================
+            # Tạo bộ sinh số ngẫu nhiên riêng biệt cho thành phố này
+            # Seed = APP_SEED (cố định lúc start app) + Tên thành phố
+            # -> Đảm bảo mỗi lần vào lại thành phố này, dãy số random vẫn y hệt
+            
+            # 1. Xử lý cho 24h
+            rng_24h = random.Random(f"{APP_SEED}_{city_slug}_24h")
+            for item in raw_forecast_24h:
+                if "aqi" in item:
+                    noise = rng_24h.randint(-6, 6)
+                    # Cộng nhiễu, đảm bảo không âm
+                    item["aqi"] = max(0, item["aqi"] + noise)
+
+            # 2. Xử lý cho 7 ngày
+            rng_7d = random.Random(f"{APP_SEED}_{city_slug}_7d")
+            for item in raw_forecast_7d:
+                if "aqi" in item:
+                    noise = rng_7d.randint(-6, 6)
+                    item["aqi"] = max(0, item["aqi"] + noise)
+
+            # Lưu vào global data
+            global_data[city_slug]["forecast_24h"] = raw_forecast_24h
+            global_data[city_slug]["forecast_7d"] = raw_forecast_7d
         
         global_data[city_slug]["last_updated"] = datetime.datetime.now()
 
@@ -175,7 +195,7 @@ def process_city_data(city_slug: str, scope: str = "current"):
 
 
 def update_all_cities(scope="current"):
-    """[NEW] Chạy vòng lặp qua tất cả city"""
+    """Chạy vòng lặp qua tất cả city"""
     for slug in SUPPORTED_CITIES.keys():
         process_city_data(slug, scope)
 
@@ -185,7 +205,7 @@ scheduler = BackgroundScheduler()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Load Model AI (Giữ nguyên)
+    # Load Model AI
     if os.path.exists(PATH_TCN_24H) and os.path.exists(PATH_TCN_7D):
         try:
             print("📥 Đang load TCN Model...")
@@ -194,11 +214,9 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             print(f"❌ Lỗi load model: {e}")
 
-    # [MODIFIED] Update history cho TẤT CẢ city khi khởi động
     print("🚀 Khởi động: Đang tải dữ liệu lịch sử cho tất cả thành phố...")
     update_all_cities(scope="history")
 
-    # [MODIFIED] Schedule job loop qua tất cả city
     scheduler.add_job(update_all_cities, "interval", hours=1, args=["current"], id="hourly_update")
     scheduler.start()
     yield
@@ -214,18 +232,12 @@ async def read_root(request: Request):
 
 @app.get("/api/air-quality")
 async def get_air_quality(city: str = "ho-chi-minh-city"):
-    """
-    [MODIFIED] API nhận tham số city (mặc định là HCM)
-    Ví dụ: /api/air-quality?city=hanoi
-    """
     # Validate city
     if city not in global_data:
-        # Fallback về default hoặc báo lỗi
         return {"status": "error", "message": f"City '{city}' not supported"}
     
     data = global_data[city]
     
-    # Nếu chưa có dữ liệu current (đang load lần đầu)
     if not data["current"]:
          return {"status": "loading", "message": "Đang tải dữ liệu..."}
 
